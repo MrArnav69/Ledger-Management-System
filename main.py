@@ -1,3 +1,5 @@
+import subprocess
+subprocess.run(["pip", "run", "pandas numpy datetime plotly tempfile threading pathlib"])
 import streamlit as st
 import pandas as pd
 import numpy as np
