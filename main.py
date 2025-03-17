@@ -104,62 +104,353 @@ os.makedirs(SUPPLIER_TRANSACTIONS_DIR, exist_ok=True)
 def apply_theme():
     theme = st.session_state.settings["theme"]
     if theme == "dark":
-        # Dark theme
+        # Royal Dark theme
         st.markdown("""
         <style>
+        /* Base elements */
         .stApp, .stTabs, .main {
-            background-color: #1E1E1E;
-            color: #FFFFFF;
+            background-color: #1A1A2E;
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
+        
+        /* Headers */
+        h1, h2, h3 {
+            color: #D4AF37 !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.5px !important;
+        }
+        
+        h4, h5, h6 {
+            color: #C0C0C0 !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Buttons */
         .stButton>button {
-            background-color: #4CAF50;
-            color: white;
-            border-radius: 5px;
+            background-color: #4B0082 !important;
+            color: #FFFFFF !important;
+            border-radius: 5px !important;
+            font-weight: bold !important;
+            border: 1px solid #6A0DAD !important;
+            padding: 0.5rem 1rem !important;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3) !important;
+            transition: all 0.3s ease !important;
         }
-        .stTextInput>div>div>input, .stSelectbox>div>div>div, .stNumberInput>div>div>input {
-            background-color: #333333;
-            color: white;
+        .stButton>button:hover {
+            background-color: #6A0DAD !important;
+            border-color: #8A2BE2 !important;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.4) !important;
         }
-        .css-1d391kg {
-            background-color: #333333;
+        
+        /* Input fields */
+        .stTextInput>div>div>input, .stSelectbox>div>div>div, .stNumberInput>div>div>input, .stDateInput>div>div>input {
+            background-color: #16213E !important;
+            color: #E0E0E0 !important;
+            border: 1px solid #4B0082 !important;
+            border-radius: 4px !important;
+            padding: 0.5rem !important;
         }
+        
+        .stTextInput>div>div>input:focus, .stSelectbox>div>div>div:focus, .stNumberInput>div>div>input:focus {
+            border-color: #D4AF37 !important;
+            box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.3) !important;
+        }
+        
+        /* Selectbox */
+        .stSelectbox>div>div>div {
+            background-color: #16213E !important;
+        }
+        
+        /* DataFrames */
         .stDataFrame {
-            background-color: #2D2D2D;
+            background-color: #16213E !important;
+            border: 1px solid #4B0082 !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
+        }
+        .stDataFrame [data-testid="stDataFrameResizable"] {
+            background-color: #16213E !important;
+        }
+        .stDataFrame th {
+            background-color: #4B0082 !important;
+            color: #D4AF37 !important;
+            font-weight: bold !important;
+            border-bottom: 2px solid #6A0DAD !important;
+        }
+        .stDataFrame td {
+            color: #E0E0E0 !important;
+            border-bottom: 1px solid #2C3E50 !important;
+        }
+        
+        /* Metric cards */
+        .metric-card {
+            background: linear-gradient(145deg, #16213E, #1A1A2E) !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+            border-radius: 8px !important;
+            padding: 1.2rem !important;
+            margin-bottom: 1rem !important;
+            border: 1px solid #4B0082 !important;
+            transition: transform 0.3s ease !important;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px) !important;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4) !important;
+        }
+        .metric-value {
+            font-size: 28px !important;
+            font-weight: bold !important;
+            color: #D4AF37 !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3) !important;
+        }
+        .metric-label {
+            font-size: 16px !important;
+            color: #C0C0C0 !important;
+            font-weight: 500 !important;
+        }
+        
+        /* Forms */
+        .stForm {
+            background-color: #16213E !important;
+            padding: 25px !important;
+            border-radius: 10px !important;
+            border: 1px solid #4B0082 !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+        }
+        
+        /* Expanders */
+        .streamlit-expanderHeader {
+            background-color: #4B0082 !important;
+            color: #E0E0E0 !important;
+            font-weight: bold !important;
+            border-radius: 5px !important;
+            padding: 0.7rem 1rem !important;
+        }
+        .streamlit-expanderContent {
+            background-color: #16213E !important;
+            border: 1px solid #4B0082 !important;
+            border-top: none !important;
+            border-radius: 0 0 5px 5px !important;
+            padding: 1rem !important;
+        }
+        
+        /* Tabs */
+        .stTabs [data-baseweb="tab-list"] {
+            background-color: #1A1A2E !important;
+            border-bottom: 2px solid #4B0082 !important;
+        }
+        .stTabs [data-baseweb="tab"] {
+            color: #C0C0C0 !important;
+            font-weight: bold !important;
+        }
+        .stTabs [aria-selected="true"] {
+            color: #D4AF37 !important;
+            background-color: #16213E !important;
+            border-bottom: 3px solid #D4AF37 !important;
+        }
+        
+        /* Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #0F172A !important;
+            border-right: 1px solid #4B0082 !important;
+        }
+        [data-testid="stSidebar"] .stButton>button {
+            width: 100% !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Success, warning, error messages */
+        .success-message {
+            background-color: rgba(75, 0, 130, 0.2) !important;
+            border-left: 5px solid #4B0082 !important;
+            color: #E0E0E0 !important;
+        }
+        .warning-message {
+            background-color: rgba(212, 175, 55, 0.2) !important;
+            border-left: 5px solid #D4AF37 !important;
+            color: #E0E0E0 !important;
+        }
+        .error-message {
+            background-color: rgba(220, 20, 60, 0.2) !important;
+            border-left: 5px solid #DC143C !important;
+            color: #E0E0E0 !important;
         }
         </style>
         """, unsafe_allow_html=True)
     else:
-        # Light theme - improved
+        # Royal Light theme
         st.markdown("""
         <style>
+        /* Base elements */
         .stApp, .stTabs, .main {
-            background-color: #FFFFFF;
-            color: #000000;
+            background-color: #F8F6FF;
+            color: #333333;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
+        
+        /* Headers */
+        h1, h2, h3 {
+            color: #4B0082 !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.5px !important;
+        }
+        
+        h4, h5, h6 {
+            color: #6A0DAD !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Buttons */
         .stButton>button {
-            background-color: #4CAF50;
-            color: white;
-            border-radius: 5px;
+            background-color: #4B0082 !important;
+            color: #FFFFFF !important;
+            border-radius: 5px !important;
+            font-weight: bold !important;
+            border: none !important;
+            padding: 0.5rem 1rem !important;
+            box-shadow: 0 2px 5px rgba(75, 0, 130, 0.3) !important;
+            transition: all 0.3s ease !important;
         }
+        .stButton>button:hover {
+            background-color: #6A0DAD !important;
+            box-shadow: 0 3px 8px rgba(75, 0, 130, 0.4) !important;
+        }
+        
+        /* Input fields */
+        .stTextInput>div>div>input, .stSelectbox>div>div>div, .stNumberInput>div>div>input, .stDateInput>div>div>input {
+            background-color: #FFFFFF !important;
+            color: #333333 !important;
+            border: 1px solid #D1C4E9 !important;
+            border-radius: 4px !important;
+            padding: 0.5rem !important;
+        }
+        
+        .stTextInput>div>div>input:focus, .stSelectbox>div>div>div:focus, .stNumberInput>div>div>input:focus {
+            border-color: #4B0082 !important;
+            box-shadow: 0 0 0 2px rgba(75, 0, 130, 0.2) !important;
+        }
+        
+        /* DataFrames */
         .stDataFrame {
-            background-color: #F0F2F6;
+            background-color: #FFFFFF !important;
+            border: 1px solid #D1C4E9 !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
         }
+        .stDataFrame th {
+            background-color: #4B0082 !important;
+            color: #FFFFFF !important;
+            font-weight: bold !important;
+        }
+        .stDataFrame td {
+            color: #333333 !important;
+            border-bottom: 1px solid #EDE7F6 !important;
+        }
+        
+        /* Metric cards */
         .metric-card {
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            border-radius: 8px;
+            background: linear-gradient(145deg, #FFFFFF, #F8F6FF) !important;
+            box-shadow: 0 4px 15px rgba(75, 0, 130, 0.1) !important;
+            border-radius: 8px !important;
+            padding: 1.2rem !important;
+            margin-bottom: 1rem !important;
+            border: 1px solid #D1C4E9 !important;
+            transition: transform 0.3s ease !important;
         }
-        .stTextInput>div>div>input, .stSelectbox>div>div>div, .stNumberInput>div>div>input {
-            border: 1px solid #E0E0E0;
-            border-radius: 4px;
+        .metric-card:hover {
+            transform: translateY(-5px) !important;
+            box-shadow: 0 6px 20px rgba(75, 0, 130, 0.2) !important;
         }
+        .metric-value {
+            font-size: 28px !important;
+            font-weight: bold !important;
+            color: #4B0082 !important;
+        }
+        .metric-label {
+            font-size: 16px !important;
+            color: #6A0DAD !important;
+            font-weight: 500 !important;
+        }
+        
+        /* Forms */
         .stForm {
-            background-color: #F9F9F9;
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #E0E0E0;
+            background-color: #FFFFFF !important;
+            padding: 25px !important;
+            border-radius: 10px !important;
+            border: 1px solid #D1C4E9 !important;
+            box-shadow: 0 4px 15px rgba(75, 0, 130, 0.1) !important;
+        }
+        
+        /* Expanders */
+        .streamlit-expanderHeader {
+            background-color: #EDE7F6 !important;
+            color: #4B0082 !important;
+            font-weight: bold !important;
+            border-radius: 5px !important;
+            padding: 0.7rem 1rem !important;
+        }
+        .streamlit-expanderContent {
+            background-color: #FFFFFF !important;
+            border: 1px solid #D1C4E9 !important;
+            border-top: none !important;
+            border-radius: 0 0 5px 5px !important;
+            padding: 1rem !important;
+        }
+        
+        /* Tabs */
+        .stTabs [data-baseweb="tab-list"] {
+            background-color: #F8F6FF !important;
+            border-bottom: 2px solid #D1C4E9 !important;
+        }
+        .stTabs [data-baseweb="tab"] {
+            color: #6A0DAD !important;
+            font-weight: bold !important;
+        }
+        .stTabs [aria-selected="true"] {
+            color: #4B0082 !important;
+            border-bottom: 3px solid #4B0082 !important;
+        }
+        
+        /* Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #EDE7F6 !important;
+            border-right: 1px solid #D1C4E9 !important;
+        }
+        [data-testid="stSidebar"] .stButton>button {
+            width: 100% !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Success, warning, error messages */
+        .success-message {
+            background-color: #E8F5E9 !important;
+            border-left: 5px solid #4B0082 !important;
+            color: #333333 !important;
+        }
+        .warning-message {
+            background-color: #FFF8E1 !important;
+            border-left: 5px solid #D4AF37 !important;
+            color: #333333 !important;
+        }
+        .error-message {
+            background-color: #FFEBEE !important;
+            border-left: 5px solid #DC143C !important;
+            color: #333333 !important;
+        }
+        
+        /* Gold accents for special elements */
+        .stMarkdown a {
+            color: #D4AF37 !important;
+            text-decoration: none !important;
+            border-bottom: 1px solid transparent !important;
+            transition: border-bottom 0.3s ease !important;
+        }
+        .stMarkdown a:hover {
+            border-bottom: 1px solid #D4AF37 !important;
         }
         </style>
         """, unsafe_allow_html=True)
+
 
 
 apply_theme()
