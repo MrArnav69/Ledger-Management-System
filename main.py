@@ -1,5 +1,4 @@
-import subprocess
-subprocess.run(["pip", "run", "pandas numpy datetime plotly tempfile threading pathlib"])
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,13 +11,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import tempfile
 import threading
-from tkinter import Tk, filedialog
 from pathlib import Path
 import base64
 import re
 import io
-import subprocess
-subprocess.run(["pip", "run", "pandas numpy datetime plotly tempfile threading pathlib"])
+
 
 using_firebase = False
 
@@ -214,32 +211,27 @@ st.markdown("""
 # Function to save Excel file using tkinter dialog
 # Fix for the Excel export on Mac
 def save_excel_file(dataframe, default_filename="ledger_export.xlsx"):
-    # Create a temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
-        # Save the dataframe to the temporary file
-        dataframe.to_excel(tmp.name, index=False, engine='openpyxl')
-        temp_filename = tmp.name
-    
-    # Create a download button instead of using tkinter
+    """
+    Save dataframe as Excel file using Streamlit's download button
+    instead of tkinter dialog
+    """
+    # Create a BytesIO object
     buffer = io.BytesIO()
+    
+    # Write the Excel file to the buffer
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         dataframe.to_excel(writer, index=False)
     
-    buffer.seek(0)
+    # Get the value of the buffer
+    excel_data = buffer.getvalue()
     
     # Create a download button
     st.download_button(
-        label="Download Excel file",
-        data=buffer,
+        label="Download Excel File",
+        data=excel_data,
         file_name=default_filename,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-    
-    # Clean up the temporary file
-    try:
-        os.unlink(temp_filename)
-    except:
-        pass
     
     return True
 
