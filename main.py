@@ -15,6 +15,8 @@ from pathlib import Path
 import base64
 import re
 import io
+import subprocess
+subprocess.run(["pip", "run", "pandas numpy datetime plotly tempfile threading pathlib"])
 
 using_firebase = False
 
