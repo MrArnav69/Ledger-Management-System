@@ -29,7 +29,7 @@ st.set_page_config(
 try:
     # Check if Firebase is already initialized
     if not firebase_admin._apps:
-        cred = credentials.Certificate("")
+        cred = credentials.Certificate("ledger-management-system-3612a-firebase-adminsdk-fbsvc-651ce96444.json")
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://ledger-management-system-3612a-default-rtdb.firebaseio.com/'
         })
