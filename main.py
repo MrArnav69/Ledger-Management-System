@@ -29,9 +29,9 @@ st.set_page_config(
 try:
     # Check if Firebase is already initialized
     if not firebase_admin._apps:
-        cred = credentials.Certificate("khata-book-773ed-firebase-adminsdk-br7ya-421781be9b.json")
+        cred = credentials.Certificate("")
         firebase_admin.initialize_app(cred, {
-            'databaseURL': 'https://khata-book-773ed-default-rtdb.firebaseio.com/'
+            'databaseURL': 'https://ledger-management-system-3612a-default-rtdb.firebaseio.com/'
         })
     using_firebase = True
     firebase_db = db.reference('/')
