@@ -29,7 +29,7 @@ st.set_page_config(
 try:
     # Check if Firebase is already initialized
     if not firebase_admin._apps:
-        cred = credentials.Certificate("khata-book-773ed-firebase-adminsdk-br7ya-2ea01d4fd3.json")
+        cred = credentials.Certificate("khata-book-773ed-firebase-adminsdk-br7ya-421781be9b.json")
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://khata-book-773ed-default-rtdb.firebaseio.com/'
         })
