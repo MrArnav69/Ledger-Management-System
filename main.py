@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,13 +10,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import tempfile
 import threading
-from pathlib import Path
-import base64
-import re
 import io
-
-
-using_firebase = False
+import re
+import base64
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import db
 
 # Set page configuration
 st.set_page_config(
@@ -27,47 +25,49 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize Firebase configuration
-firebaseConfig = {
-    "apiKey": "AIzaSyC8QHJTmgtol1PE44BT2AyfQR31rXtzEAE",
-    "authDomain": "ledger-application.firebaseapp.com",
-    "databaseURL": "https://ledger-application-default-rtdb.firebaseio.com",
-    "projectId": "ledger-application",
-    "storageBucket": "ledger-application.firebasestorage.app",
-    "messagingSenderId": "241611587874",
-    "appId": "1:241611587874:web:15280b2c161f83a903657b"
-}
+# Initialize Firebase with the provided credentials
+try:
+    # Check if Firebase is already initialized
+    if not firebase_admin._apps:
+        cred = credentials.Certificate("khata-book-773ed-firebase-adminsdk-br7ya-2ea01d4fd3.json")
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': 'https://khata-book-773ed-default-rtdb.firebaseio.com/'
+        })
+    using_firebase = True
+    firebase_db = db.reference('/')
+except Exception as e:
+    st.sidebar.error(f"Firebase initialization error: {e}")
+    using_firebase = False
 
-# Initialize Firebase
-if st.session_state.get('enable_firebase', False) and firebaseConfig["apiKey"] != "YOUR_API_KEY":
-    try:
-        import pyrebase
-        firebase = pyrebase.initialize_app(firebaseConfig)
-        db = firebase.database()
-        using_firebase = True
-    except ImportError:
-        st.sidebar.error("Could not import pyrebase. Using local storage.")
-        using_firebase = False
+# File paths for local storage
+DATA_DIR = "data"
+CUSTOMERS_FILE = os.path.join(DATA_DIR, "customers.json")
+SUPPLIERS_FILE = os.path.join(DATA_DIR, "suppliers.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
+CUSTOMER_TRANSACTIONS_DIR = os.path.join(DATA_DIR, "customer_transactions")
+SUPPLIER_TRANSACTIONS_DIR = os.path.join(DATA_DIR, "supplier_transactions")
+
+# Create data directories if they don't exist
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(CUSTOMER_TRANSACTIONS_DIR, exist_ok=True)
+os.makedirs(SUPPLIER_TRANSACTIONS_DIR, exist_ok=True)
 
 # Initialize session state variables
-# Initialize session state for storing variables
 if 'settings' not in st.session_state:
     st.session_state.settings = {
         "theme": "light",
         "auto_backup": True,
         "auto_calculate_balance": True,
         "date_format": "%Y-%m-%d",
-        "currency_symbol": "₹",  # Make sure this is set
+        "currency_symbol": "₹",
         "notification_enabled": True,
-        "auto_save_interval": 5
+        "auto_save_interval": 5,
+        "auto_date_format": True
     }
 else:
     # Ensure currency_symbol exists in settings
     if "currency_symbol" not in st.session_state.settings:
         st.session_state.settings["currency_symbol"] = "₹"
-
-
-
 
 if 'current_customer' not in st.session_state:
     st.session_state.current_customer = None
@@ -86,21 +86,53 @@ if 'confirm_delete_supplier' not in st.session_state:
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
 
-# File paths for local storage
-DATA_DIR = "data"
-CUSTOMERS_FILE = os.path.join(DATA_DIR, "customers.json")
-SUPPLIERS_FILE = os.path.join(DATA_DIR, "suppliers.json")
-SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
-CUSTOMER_TRANSACTIONS_DIR = os.path.join(DATA_DIR, "customer_transactions")
-SUPPLIER_TRANSACTIONS_DIR = os.path.join(DATA_DIR, "supplier_transactions")
-
-# Create data directories if they don't exist
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(CUSTOMER_TRANSACTIONS_DIR, exist_ok=True)
-os.makedirs(SUPPLIER_TRANSACTIONS_DIR, exist_ok=True)
+# Custom DateEntry class for automatic date formatting
+class DateEntry:
+    """
+    A custom date entry component that automatically adds dashes as the user types.
+    """
+    def __init__(self, label, key, value="", help="Format: YYYY-MM-DD"):
+        self.label = label
+        self.key = key
+        self.value = value
+        self.help = help
+        
+    def render(self):
+        # Get the current value from session state if it exists
+        current_value = st.session_state.get(self.key, self.value)
+        
+        # Create the text input
+        date_input = st.text_input(
+            self.label,
+            value=current_value,
+            key=self.key,
+            help=self.help
+        )
+        
+        # Auto-complete the date by adding dashes
+        if date_input and len(date_input) != len(current_value):
+            # Remove any existing dashes
+            clean_date = date_input.replace("-", "").replace("/", "")
+            
+            # Format as YYYY-MM-DD
+            if len(clean_date) >= 8:
+                formatted_date = f"{clean_date[:4]}-{clean_date[4:6]}-{clean_date[6:8]}"
+            elif len(clean_date) >= 6:
+                formatted_date = f"{clean_date[:4]}-{clean_date[4:6]}-"
+            elif len(clean_date) >= 4:
+                formatted_date = f"{clean_date[:4]}-"
+            else:
+                formatted_date = clean_date
+            
+            # Update the value in session state if it changed
+            if formatted_date != date_input:
+                st.session_state[self.key] = formatted_date
+                # Use rerun to update the UI with the formatted date
+                st.rerun()
+        
+        return date_input
 
 # Apply theme
-# Fix for the light theme optimization
 def apply_theme():
     theme = st.session_state.settings["theme"]
     if theme == "dark":
@@ -275,6 +307,27 @@ def apply_theme():
             border-left: 5px solid #DC143C !important;
             color: #E0E0E0 !important;
         }
+        
+        /* Date input styling */
+        .date-input {
+            position: relative;
+        }
+        .date-input input {
+            background-color: #16213E !important;
+            color: #E0E0E0 !important;
+            border: 1px solid #4B0082 !important;
+            border-radius: 4px !important;
+            padding-left: 30px !important;
+        }
+        .date-input::before {
+            content: "📅";
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            font-size: 16px;
+        }
         </style>
         """, unsafe_allow_html=True)
     else:
@@ -316,6 +369,7 @@ def apply_theme():
             box-shadow: 0 3px 8px rgba(75, 0, 130, 0.4) !important;
         }
         
+
         /* Input fields */
         .stTextInput>div>div>input, .stSelectbox>div>div>div, .stNumberInput>div>div>input, .stDateInput>div>div>input {
             background-color: #FFFFFF !important;
@@ -438,20 +492,28 @@ def apply_theme():
             color: #333333 !important;
         }
         
-        /* Gold accents for special elements */
-        .stMarkdown a {
-            color: #D4AF37 !important;
-            text-decoration: none !important;
-            border-bottom: 1px solid transparent !important;
-            transition: border-bottom 0.3s ease !important;
+        /* Date input styling */
+        .date-input {
+            position: relative;
         }
-        .stMarkdown a:hover {
-            border-bottom: 1px solid #D4AF37 !important;
+        .date-input input {
+            background-color: #FFFFFF !important;
+            color: #333333 !important;
+            border: 1px solid #D1C4E9 !important;
+            border-radius: 4px !important;
+            padding-left: 30px !important;
+        }
+        .date-input::before {
+            content: "📅";
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            font-size: 16px;
         }
         </style>
         """, unsafe_allow_html=True)
-
-
 
 apply_theme()
 
@@ -499,8 +561,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Function to save Excel file using tkinter dialog
-# Fix for the Excel export on Mac
+# Function to save Excel file
 def save_excel_file(dataframe, default_filename="ledger_export.xlsx"):
     """
     Save dataframe as Excel file using Streamlit's download button
@@ -526,7 +587,6 @@ def save_excel_file(dataframe, default_filename="ledger_export.xlsx"):
     
     return True
 
-
 # Format currency
 def format_currency(amount):
     currency_symbol = st.session_state.settings["currency_symbol"]
@@ -542,7 +602,6 @@ def format_date(date_str):
         return date_str
 
 # Helper function to construct transaction date string with separators
-# Fix for the date formatting function
 def format_date_input(date_str):
     if not date_str:
         return ""
@@ -554,16 +613,13 @@ def format_date_input(date_str):
     if len(clean_date) >= 8:
         return f"{clean_date[:4]}-{clean_date[4:6]}-{clean_date[6:8]}"
     elif len(clean_date) >= 6:
-        return f"{clean_date[:4]}-{clean_date[4:6]}-"  # Add dash after month
+        return f"{clean_date[:4]}-{clean_date[4:6]}-"
     elif len(clean_date) >= 4:
-        return f"{clean_date[:4]}-"  # Add dash after year
+        return f"{clean_date[:4]}-"
     else:
         return clean_date
 
-
-
 # Validate date format
-# Fix for the validate_date function (it was incomplete in the original code)
 def validate_date(date_str):
     pattern = r'^\d{4}-\d{2}-\d{2}$'
     if not re.match(pattern, date_str):
@@ -575,13 +631,12 @@ def validate_date(date_str):
     except ValueError:
         return False
 
-
 # Firebase data functions
-# Fix for the db not defined error in load_settings function
 def load_settings():
     if using_firebase:
         try:
-            settings = db.child("settings").get().val()
+            settings_ref = firebase_db.child("settings")
+            settings = settings_ref.get()
             if not settings:
                 # Default settings
                 settings = {
@@ -594,7 +649,7 @@ def load_settings():
                     "auto_save_interval": 5,
                     "auto_date_format": True
                 }
-                db.child("settings").set(settings)
+                settings_ref.set(settings)
             else:
                 # Ensure all required keys exist
                 required_keys = {
@@ -640,7 +695,7 @@ def load_settings():
     except Exception as e:
         st.error(f"Error loading settings from local storage: {e}")
     
-    # Default settings if nothing else works
+    # Default settings if all else fails
     return {
         "theme": "light",
         "auto_backup": True,
@@ -652,12 +707,10 @@ def load_settings():
         "auto_date_format": True
     }
 
-
-
 def save_settings(settings_data):
     if using_firebase:
         try:
-            db.child("settings").set(settings_data)
+            firebase_db.child("settings").set(settings_data)
             return True
         except Exception as e:
             st.error(f"Error saving settings to Firebase: {e}")
@@ -665,7 +718,7 @@ def save_settings(settings_data):
     # Fallback to local storage
     try:
         with open(SETTINGS_FILE, 'w') as f:
-            json.dump(settings_data, f)
+            json.dump(settings_data, f, indent=2)
         return True
     except Exception as e:
         st.error(f"Error saving settings locally: {e}")
@@ -674,7 +727,7 @@ def save_settings(settings_data):
 def load_customers():
     if using_firebase:
         try:
-            customers = db.child("customers").get().val()
+            customers = firebase_db.child("customers").get()
             if customers:
                 return customers
             return {}
@@ -694,7 +747,7 @@ def load_customers():
 def save_customer(customer_id, customer_data):
     if using_firebase:
         try:
-            db.child("customers").child(customer_id).set(customer_data)
+            firebase_db.child("customers").child(customer_id).set(customer_data)
             return True
         except Exception as e:
             st.error(f"Error saving customer to Firebase: {e}")
@@ -704,7 +757,7 @@ def save_customer(customer_id, customer_data):
         customers = load_customers()
         customers[customer_id] = customer_data
         with open(CUSTOMERS_FILE, 'w') as f:
-            json.dump(customers, f)
+            json.dump(customers, f, indent=2)
         return True
     except Exception as e:
         st.error(f"Error saving customer locally: {e}")
@@ -713,8 +766,8 @@ def save_customer(customer_id, customer_data):
 def delete_customer(customer_id):
     if using_firebase:
         try:
-            db.child("customers").child(customer_id).remove()
-            db.child("customer_transactions").child(customer_id).remove()
+            firebase_db.child("customers").child(customer_id).delete()
+            firebase_db.child("customer_transactions").child(customer_id).delete()
             return True
         except Exception as e:
             st.error(f"Error deleting customer from Firebase: {e}")
@@ -725,7 +778,7 @@ def delete_customer(customer_id):
         if customer_id in customers:
             del customers[customer_id]
             with open(CUSTOMERS_FILE, 'w') as f:
-                json.dump(customers, f)
+                json.dump(customers, f, indent=2)
             
             # Delete transactions
             customer_trans_file = os.path.join(CUSTOMER_TRANSACTIONS_DIR, f"{customer_id}.json")
@@ -740,7 +793,7 @@ def delete_customer(customer_id):
 def load_suppliers():
     if using_firebase:
         try:
-            suppliers = db.child("suppliers").get().val()
+            suppliers = firebase_db.child("suppliers").get()
             if suppliers:
                 return suppliers
             return {}
@@ -760,7 +813,7 @@ def load_suppliers():
 def save_supplier(supplier_id, supplier_data):
     if using_firebase:
         try:
-            db.child("suppliers").child(supplier_id).set(supplier_data)
+            firebase_db.child("suppliers").child(supplier_id).set(supplier_data)
             return True
         except Exception as e:
             st.error(f"Error saving supplier to Firebase: {e}")
@@ -770,7 +823,7 @@ def save_supplier(supplier_id, supplier_data):
         suppliers = load_suppliers()
         suppliers[supplier_id] = supplier_data
         with open(SUPPLIERS_FILE, 'w') as f:
-            json.dump(suppliers, f)
+            json.dump(suppliers, f, indent=2)
         return True
     except Exception as e:
         st.error(f"Error saving supplier locally: {e}")
@@ -779,8 +832,8 @@ def save_supplier(supplier_id, supplier_data):
 def delete_supplier(supplier_id):
     if using_firebase:
         try:
-            db.child("suppliers").child(supplier_id).remove()
-            db.child("supplier_transactions").child(supplier_id).remove()
+            firebase_db.child("suppliers").child(supplier_id).delete()
+            firebase_db.child("supplier_transactions").child(supplier_id).delete()
             return True
         except Exception as e:
             st.error(f"Error deleting supplier from Firebase: {e}")
@@ -791,7 +844,7 @@ def delete_supplier(supplier_id):
         if supplier_id in suppliers:
             del suppliers[supplier_id]
             with open(SUPPLIERS_FILE, 'w') as f:
-                json.dump(suppliers, f)
+                json.dump(suppliers, f, indent=2)
             
             # Delete transactions
             supplier_trans_file = os.path.join(SUPPLIER_TRANSACTIONS_DIR, f"{supplier_id}.json")
@@ -806,7 +859,7 @@ def delete_supplier(supplier_id):
 def load_transactions(entity_type, entity_id):
     if using_firebase:
         try:
-            transactions = db.child(f"{entity_type}_transactions").child(entity_id).get().val()
+            transactions = firebase_db.child(f"{entity_type}_transactions").child(entity_id).get()
             if transactions:
                 return transactions
             return {}
@@ -831,7 +884,7 @@ def load_transactions(entity_type, entity_id):
 def save_transaction(entity_type, entity_id, transaction_id, transaction_data):
     if using_firebase:
         try:
-            db.child(f"{entity_type}_transactions").child(entity_id).child(transaction_id).set(transaction_data)
+            firebase_db.child(f"{entity_type}_transactions").child(entity_id).child(transaction_id).set(transaction_data)
             return True
         except Exception as e:
             st.error(f"Error saving transaction to Firebase: {e}")
@@ -851,7 +904,7 @@ def save_transaction(entity_type, entity_id, transaction_id, transaction_data):
         transactions[transaction_id] = transaction_data
         
         with open(trans_file, 'w') as f:
-            json.dump(transactions, f)
+            json.dump(transactions, f, indent=2)
         
         return True
     except Exception as e:
@@ -861,7 +914,7 @@ def save_transaction(entity_type, entity_id, transaction_id, transaction_data):
 def delete_transaction(entity_type, entity_id, transaction_id):
     if using_firebase:
         try:
-            db.child(f"{entity_type}_transactions").child(entity_id).child(transaction_id).remove()
+            firebase_db.child(f"{entity_type}_transactions").child(entity_id).child(transaction_id).delete()
             return True
         except Exception as e:
             st.error(f"Error deleting transaction from Firebase: {e}")
@@ -881,7 +934,7 @@ def delete_transaction(entity_type, entity_id, transaction_id):
                 del transactions[transaction_id]
                 
                 with open(trans_file, 'w') as f:
-                    json.dump(transactions, f)
+                    json.dump(transactions, f, indent=2)
                 
                 return True
     except Exception as e:
@@ -1360,21 +1413,20 @@ with tab2:
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        date_input = st.text_input(
-                            "Date (YYYY-MM-DD)*", 
-                            value=datetime.datetime.now().strftime('%Y-%m-%d'),
-                            help="Format: YYYY-MM-DD",
-                            key="customer_date_input"
+                        # Use DateEntry component for automatic date formatting
+                        st.markdown('<div class="date-input">', unsafe_allow_html=True)
+                        date_entry = DateEntry(
+                            label="Date (YYYY-MM-DD)*",
+                            key=f"customer_date_input_{customer_id}",
+                            value=datetime.datetime.now().strftime('%Y-%m-%d')
                         )
-                        
-                        # Format date as user types if auto-format is enabled
-                        if st.session_state.settings.get("auto_date_format", True):
-                            date_input = format_date_input(date_input)
+                        date_input = date_entry.render()
+                        st.markdown('</div>', unsafe_allow_html=True)
                         
                         particular = st.text_area(
                             "Particulars*", 
                             help="Description of the transaction",
-                            key="customer_particular"
+                            key=f"customer_particular_{customer_id}"
                         )
                     
                     with col2:
@@ -1383,7 +1435,7 @@ with tab2:
                             min_value=0.0, 
                             format="%.2f",
                             help="Amount to be added to customer's account (customer gives money)",
-                            key="customer_debit"
+                            key=f"customer_debit_{customer_id}"
                         )
                         
                         credit = st.number_input(
@@ -1391,7 +1443,7 @@ with tab2:
                             min_value=0.0, 
                             format="%.2f",
                             help="Amount to be subtracted from customer's account (customer takes money/goods)",
-                            key="customer_credit"
+                            key=f"customer_credit_{customer_id}"
                         )
                     
                     transaction_submitted = st.form_submit_button("Add Transaction")
@@ -1505,11 +1557,13 @@ with tab2:
                         ]
                     })
                     
-                    # Save to Excel using tkinter dialog
+                    # Save to Excel using Streamlit download button
                     filename = f"customer_ledger_{customer.get('name', 'unknown').replace(' ', '_')}.xlsx"
-                    if save_excel_file(export_df, filename):
-                        st.success("Ledger exported successfully!")
+                    save_excel_file(export_df, filename)
                 
+                #
+
+
                 # Transaction actions
                 st.subheader("Transaction Actions")
                 
@@ -1552,23 +1606,21 @@ with tab2:
                         col1, col2 = st.columns(2)
                         
                         with col1:
-                            edit_date = st.text_input(
-                                "Date (YYYY-MM-DD)*", 
-                                value=transaction.get('date', ''),
-                                help="Format: YYYY-MM-DD",
-                                key="edit_customer_date"
+                            # Use DateEntry component for automatic date formatting
+                            st.markdown('<div class="date-input">', unsafe_allow_html=True)
+                            date_entry = DateEntry(
+                                label="Date (YYYY-MM-DD)*",
+                                key=f"edit_customer_date_{transaction_id}",
+                                value=transaction.get('date', '')
                             )
-                            
-                            # Format date as user types if auto-format is enabled
-                            # Format date as user types if auto-format is enabled
-                            if st.session_state.settings.get("auto_date_format", True):
-                                edit_date = format_date_input(edit_date)
+                            edit_date = date_entry.render()
+                            st.markdown('</div>', unsafe_allow_html=True)
                             
                             edit_particular = st.text_area(
                                 "Particulars*", 
                                 value=transaction.get('particular', ''),
                                 help="Description of the transaction",
-                                key="edit_customer_particular"
+                                key=f"edit_customer_particular_{transaction_id}"
                             )
                         
                         with col2:
@@ -1578,7 +1630,7 @@ with tab2:
                                 value=float(transaction.get('debit', 0)),
                                 format="%.2f",
                                 help="Amount to be added to customer's account (customer gives money)",
-                                key="edit_customer_debit"
+                                key=f"edit_customer_debit_{transaction_id}"
                             )
                             
                             edit_credit = st.number_input(
@@ -1587,7 +1639,7 @@ with tab2:
                                 value=float(transaction.get('credit', 0)),
                                 format="%.2f",
                                 help="Amount to be subtracted from customer's account (customer takes money/goods)",
-                                key="edit_customer_credit"
+                                key=f"edit_customer_credit_{transaction_id}"
                             )
                         
                         col1, col2 = st.columns(2)
@@ -1853,30 +1905,28 @@ with tab3:
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        date_input = st.text_input(
-                            "Date (YYYY-MM-DD)*", 
-                            value=datetime.datetime.now().strftime('%Y-%m-%d'),
-                            help="Format: YYYY-MM-DD",
-                            key="supplier_date_input"
+                        # Use DateEntry component for automatic date formatting
+                        st.markdown('<div class="date-input">', unsafe_allow_html=True)
+                        date_entry = DateEntry(
+                            label="Date (YYYY-MM-DD)*",
+                            key=f"supplier_date_input_{supplier_id}",
+                            value=datetime.datetime.now().strftime('%Y-%m-%d')
                         )
-                        
-                        # Format date as user types if auto-format is enabled
-                        if st.session_state.settings.get("auto_date_format", True):
-                            date_input = format_date_input(date_input)
+                        date_input = date_entry.render()
+                        st.markdown('</div>', unsafe_allow_html=True)
                         
                         particular = st.text_area(
                             "Particulars*", 
                             help="Description of the transaction",
-                            key="supplier_particular"
+                            key=f"supplier_particular_{supplier_id}"
                         )
-                    
                     with col2:
                         debit = st.number_input(
                             "Debit Amount", 
                             min_value=0.0, 
                             format="%.2f",
                             help="Amount to be added to supplier's account (you give money to supplier)",
-                            key="supplier_debit"
+                            key=f"supplier_debit_{supplier_id}"
                         )
                         
                         credit = st.number_input(
@@ -1884,7 +1934,7 @@ with tab3:
                             min_value=0.0, 
                             format="%.2f",
                             help="Amount to be subtracted from supplier's account (you get goods/money from supplier)",
-                            key="supplier_credit"
+                            key=f"supplier_credit_{supplier_id}"
                         )
                     
                     transaction_submitted = st.form_submit_button("Add Transaction")
@@ -1998,10 +2048,9 @@ with tab3:
                         ]
                     })
                     
-                    # Save to Excel using tkinter dialog
+                    # Save to Excel using Streamlit download button
                     filename = f"supplier_ledger_{supplier.get('name', 'unknown').replace(' ', '_')}.xlsx"
-                    if save_excel_file(export_df, filename):
-                        st.success("Ledger exported successfully!")
+                    save_excel_file(export_df, filename)
                 
                 # Transaction actions
                 st.subheader("Transaction Actions")
@@ -2045,22 +2094,21 @@ with tab3:
                         col1, col2 = st.columns(2)
                         
                         with col1:
-                            edit_date = st.text_input(
-                                "Date (YYYY-MM-DD)*", 
-                                value=transaction.get('date', ''),
-                                help="Format: YYYY-MM-DD",
-                                key="edit_supplier_date"
+                            # Use DateEntry component for automatic date formatting
+                            st.markdown('<div class="date-input">', unsafe_allow_html=True)
+                            date_entry = DateEntry(
+                                label="Date (YYYY-MM-DD)*",
+                                key=f"edit_supplier_date_{transaction_id}",
+                                value=transaction.get('date', '')
                             )
-                            
-                            # Format date as user types if auto-format is enabled
-                            if st.session_state.settings.get("auto_date_format", True):
-                                edit_date = format_date_input(edit_date)
+                            edit_date = date_entry.render()
+                            st.markdown('</div>', unsafe_allow_html=True)
                             
                             edit_particular = st.text_area(
                                 "Particulars*", 
                                 value=transaction.get('particular', ''),
                                 help="Description of the transaction",
-                                key="edit_supplier_particular"
+                                key=f"edit_supplier_particular_{transaction_id}"
                             )
                         
                         with col2:
@@ -2070,7 +2118,7 @@ with tab3:
                                 value=float(transaction.get('debit', 0)),
                                 format="%.2f",
                                 help="Amount to be added to supplier's account (you give money to supplier)",
-                                key="edit_supplier_debit"
+                                key=f"edit_supplier_debit_{transaction_id}"
                             )
                             
                             edit_credit = st.number_input(
@@ -2079,7 +2127,7 @@ with tab3:
                                 value=float(transaction.get('credit', 0)),
                                 format="%.2f",
                                 help="Amount to be subtracted from supplier's account (you get goods/money from supplier)",
-                                key="edit_supplier_credit"
+                                key=f"edit_supplier_credit_{transaction_id}"
                             )
                         
                         col1, col2 = st.columns(2)
@@ -2190,9 +2238,10 @@ with tab4:
         with st.form("appearance_settings_form"):
             theme = st.radio(
                 "Application Theme",
-                options=["light", "dark"],
-                index=0 if st.session_state.settings.get("theme", "light") == "light" else 1,
-                help="Choose between light and dark theme"
+                options=["light", "dark", "royal"],
+                index=0 if st.session_state.settings.get("theme", "light") == "light" else 
+                      1 if st.session_state.settings.get("theme", "light") == "dark" else 2,
+                help="Choose between light, dark, or royal theme"
             )
             
             submitted = st.form_submit_button("Save Appearance Settings")
@@ -2211,6 +2260,20 @@ with tab4:
     # Data Management Settings
     with settings_tab3:
         st.subheader("Data Management")
+        
+        # Firebase integration settings
+        st.write("### Cloud Storage")
+        
+        enable_firebase = st.checkbox(
+            "Enable Firebase Integration",
+            value=st.session_state.get('enable_firebase', False),
+            help="Store data in Firebase cloud database"
+        )
+        
+        if enable_firebase:
+            st.warning("Firebase configuration is not set up. Please configure Firebase settings first.")
+        
+        st.session_state['enable_firebase'] = enable_firebase
         
         # Backup data
         st.write("### Backup Data")
@@ -2268,7 +2331,6 @@ with tab4:
                     required_keys = ["customers", "suppliers", "settings", "customer_transactions", "supplier_transactions"]
                     if not all(key in backup_data for key in required_keys):
                         st.error("Invalid backup file format. Missing required data.")
-
                         st.stop()
                     
                     # Restore settings
@@ -2308,20 +2370,18 @@ with tab4:
             
             if confirm == "CONFIRM":
                 try:
-                    # Reset Firebase data if using Firebase
-                    if using_firebase:
-                        db.child("customers").remove()
-                        db.child("suppliers").remove()
-                        db.child("customer_transactions").remove()
-                        db.child("supplier_transactions").remove()
-                    
+
+
+
+
+
+
+
                     # Reset local data
                     if os.path.exists(DATA_DIR):
                         import shutil
                         shutil.rmtree(DATA_DIR)
                         os.makedirs(DATA_DIR, exist_ok=True)
-                        os.makedirs(CUSTOMER_DIR, exist_ok=True)
-                        os.makedirs(SUPPLIER_DIR, exist_ok=True)
                         os.makedirs(CUSTOMER_TRANSACTIONS_DIR, exist_ok=True)
                         os.makedirs(SUPPLIER_TRANSACTIONS_DIR, exist_ok=True)
                     
@@ -2334,230 +2394,40 @@ with tab4:
                 except Exception as e:
                     st.error(f"Error resetting data: {e}")
 
-# Initialize required directories
-DATA_DIR = "data"
-CUSTOMER_DIR = os.path.join(DATA_DIR, "customers")
-SUPPLIER_DIR = os.path.join(DATA_DIR, "suppliers")
-CUSTOMER_TRANSACTIONS_DIR = os.path.join(DATA_DIR, "customer_transactions")
-SUPPLIER_TRANSACTIONS_DIR = os.path.join(DATA_DIR, "supplier_transactions")
-
-# Create directories if they don't exist
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(CUSTOMER_DIR, exist_ok=True)
-os.makedirs(SUPPLIER_DIR, exist_ok=True)
-os.makedirs(CUSTOMER_TRANSACTIONS_DIR, exist_ok=True)
-os.makedirs(SUPPLIER_TRANSACTIONS_DIR, exist_ok=True)
-
-# Helper functions for data storage
-def save_settings(settings_data):
-    if using_firebase:
-        try:
-            db.child("settings").set(settings_data)
-            return True
-        except Exception as e:
-            st.error(f"Error saving settings to Firebase: {e}")
+# DateEntry component for automatic date formatting
+class DateEntry:
+    def __init__(self, label, key, value=""):
+        self.label = label
+        self.key = key
+        self.value = value
     
-    # Fallback to local storage
-    try:
-        settings_file = os.path.join(DATA_DIR, "settings.json")
-        with open(settings_file, 'w') as f:
-            json.dump(settings_data, f, indent=2)
-        return True
-    except Exception as e:
-        st.error(f"Error saving settings locally: {e}")
-        return False
-
-def save_customer(customer_id, customer_data):
-    if using_firebase:
-        try:
-            db.child("customers").child(customer_id).set(customer_data)
-            return True
-        except Exception as e:
-            st.error(f"Error saving customer to Firebase: {e}")
-    
-    # Fallback to local storage
-    try:
-        customer_file = os.path.join(CUSTOMER_DIR, f"{customer_id}.json")
-        with open(customer_file, 'w') as f:
-            json.dump(customer_data, f, indent=2)
+    def render(self):
+        date_input = st.text_input(
+            self.label,
+            value=self.value,
+            key=self.key
+        )
         
-        # Update customer index
-        index_file = os.path.join(CUSTOMER_DIR, "index.json")
-        index_data = {}
+        # Format date as user types if auto-format is enabled
+        if st.session_state.settings.get("auto_date_format", True):
+            date_input = format_date_input(date_input)
         
-        if os.path.exists(index_file):
-            with open(index_file, 'r') as f:
-                index_data = json.load(f)
-        
-        index_data[customer_id] = customer_data
-        
-        with open(index_file, 'w') as f:
-            json.dump(index_data, f, indent=2)
-        
-        return True
-    except Exception as e:
-        st.error(f"Error saving customer locally: {e}")
-        return False
-
-def delete_customer(customer_id):
-    if using_firebase:
-        try:
-            db.child("customers").child(customer_id).remove()
-            db.child("customer_transactions").child(customer_id).remove()
-            return True
-        except Exception as e:
-            st.error(f"Error deleting customer from Firebase: {e}")
-    
-    # Fallback to local storage
-    try:
-        # Delete customer file
-        customer_file = os.path.join(CUSTOMER_DIR, f"{customer_id}.json")
-        if os.path.exists(customer_file):
-            os.remove(customer_file)
-        
-        # Delete transactions file
-        transactions_file = os.path.join(CUSTOMER_TRANSACTIONS_DIR, f"{customer_id}.json")
-        if os.path.exists(transactions_file):
-            os.remove(transactions_file)
-        
-        # Update customer index
-        index_file = os.path.join(CUSTOMER_DIR, "index.json")
-        if os.path.exists(index_file):
-            with open(index_file, 'r') as f:
-                index_data = json.load(f)
-            
-            if customer_id in index_data:
-                del index_data[customer_id]
-            
-            with open(index_file, 'w') as f:
-                json.dump(index_data, f, indent=2)
-        
-        return True
-    except Exception as e:
-        st.error(f"Error deleting customer locally: {e}")
-        return False
-
-def save_supplier(supplier_id, supplier_data):
-    if using_firebase:
-        try:
-            db.child("suppliers").child(supplier_id).set(supplier_data)
-            return True
-        except Exception as e:
-            st.error(f"Error saving supplier to Firebase: {e}")
-    
-    # Fallback to local storage
-    try:
-        supplier_file = os.path.join(SUPPLIER_DIR, f"{supplier_id}.json")
-        with open(supplier_file, 'w') as f:
-            json.dump(supplier_data, f, indent=2)
-        
-        # Update supplier index
-        index_file = os.path.join(SUPPLIER_DIR, "index.json")
-        index_data = {}
-        
-        if os.path.exists(index_file):
-            with open(index_file, 'r') as f:
-                index_data = json.load(f)
-        
-        index_data[supplier_id] = supplier_data
-        
-        with open(index_file, 'w') as f:
-            json.dump(index_data, f, indent=2)
-        
-        return True
-    except Exception as e:
-        st.error(f"Error saving supplier locally: {e}")
-        return False
-
-def delete_supplier(supplier_id):
-    if using_firebase:
-        try:
-            db.child("suppliers").child(supplier_id).remove()
-            db.child("supplier_transactions").child(supplier_id).remove()
-            return True
-        except Exception as e:
-            st.error(f"Error deleting supplier from Firebase: {e}")
-    
-    # Fallback to local storage
-    try:
-        # Delete supplier file
-        supplier_file = os.path.join(SUPPLIER_DIR, f"{supplier_id}.json")
-        if os.path.exists(supplier_file):
-            os.remove(supplier_file)
-        
-        # Delete transactions file
-        transactions_file = os.path.join(SUPPLIER_TRANSACTIONS_DIR, f"{supplier_id}.json")
-        if os.path.exists(transactions_file):
-            os.remove(transactions_file)
-        
-        # Update supplier index
-        index_file = os.path.join(SUPPLIER_DIR, "index.json")
-        if os.path.exists(index_file):
-            with open(index_file, 'r') as f:
-                index_data = json.load(f)
-            
-            if supplier_id in index_data:
-                del index_data[supplier_id]
-            
-            with open(index_file, 'w') as f:
-                json.dump(index_data, f, indent=2)
-        
-        return True
-    except Exception as e:
-        st.error(f"Error deleting supplier locally: {e}")
-        return False
-
-# Helper function for date validation
-def validate_date(date_str):
-    try:
-        datetime.datetime.strptime(date_str, '%Y-%m-%d')
-        return True
-    except ValueError:
-        return False
-
-# Helper function to format date input
-def format_date_input(date_str):
-    if not date_str:
-        return ""
-    
-    # Remove any existing separators
-    date_str = date_str.replace("-", "").replace("/", "")
-    
-    # Format as YYYY-MM-DD
-    if len(date_str) >= 8:
-        return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
-    elif len(date_str) >= 6:
-        return f"{date_str[:4]}-{date_str[4:6]}-"
-    elif len(date_str) >= 4:
-        return f"{date_str[:4]}-"
-    else:
-        return date_str
-
-# Initialize session state variables
-if 'edit_customer' not in st.session_state:
-    st.session_state.edit_customer = None
-if 'edit_supplier' not in st.session_state:
-    st.session_state.edit_supplier = None
-if 'edit_transaction' not in st.session_state:
-    st.session_state.edit_transaction = None
-if 'confirm_delete_customer' not in st.session_state:
-    st.session_state.confirm_delete_customer = None
-if 'confirm_delete_supplier' not in st.session_state:
-    st.session_state.confirm_delete_supplier = None
-
-# Determine if we're using Firebase or local storage
-using_firebase = False
-if firebaseConfig["apiKey"] != "YOUR_API_KEY":
-    using_firebase = True
-else:
-    st.sidebar.warning("Firebase not configured. Using local storage.")
+        return date_input
 
 # Add a footer
 st.markdown("""
 ---
 <div style="text-align: center; color: #888;">
     <p>Ledger Management System | Version 1.0</p>
-    <p>Developed by Mr.Arnav Gupta</p>
-    <p>© 2025 All Rights Reserved</p>
+    <p>© 2023 All Rights Reserved</p>
 </div>
 """, unsafe_allow_html=True)
+
+# Auto-refresh data periodically if enabled
+if st.session_state.settings.get("auto_save_interval", 5) > 0:
+    current_time = time.time()
+    if current_time - st.session_state.last_refresh > st.session_state.settings.get("auto_save_interval", 5) * 60:
+        st.session_state.last_refresh = current_time
+        # This will trigger a rerun to refresh data
+        st.rerun()
+
